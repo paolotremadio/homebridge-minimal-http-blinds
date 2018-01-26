@@ -1,19 +1,2 @@
-
-# Mac
-.DS_Store
-
-# Node
-node_modules/
-npm-debug.log
-.node-version
-
-# Intellij
-.idea/
-
-# HomeBridge
-config.json
-config.test.json
-persist/
-
-
-.AppleDouble
+node_modules
+package-lock.json
