@@ -104,9 +104,25 @@ class MinimalisticHttpBlinds {
     }
   }
 
+  getPositionDescription(value) {
+    if (value === 100) {
+      return 'open';
+    } else if (value === 0) {
+      return 'closed';
+    } else if (value === 50) {
+      return 'half open';
+    } else {
+      return `${value}%`;
+    }
+  }
+
   setLastKnownPosition(value) {
     if (this.lastKnownPosition !== value) {
-      this.log(`Blind has moved, new position: ${value}`);
+      if (this.lastKnownPosition === null) {
+        this.log(`Setting initial position: ${this.getPositionDescription(value)}`);
+      } else {
+        this.log(`Blind has moved, new position: ${this.getPositionDescription(value)}`);
+      }
 
       this.windowCoveringService
         .getCharacteristic(Characteristic.CurrentPosition)
@@ -123,7 +139,7 @@ class MinimalisticHttpBlinds {
   setTargetPosition(position, callback) {
     this.targetPosition = position;
 
-    this.log(`Requested new position: ${position}`);
+    this.log(`Requested new position: ${this.getPositionDescription(position)}`);
     this.stopCurrentPositionTimer();
 
     request(
