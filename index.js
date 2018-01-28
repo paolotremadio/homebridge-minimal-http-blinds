@@ -30,7 +30,7 @@ class MinimalisticHttpBlinds {
     this.lastKnownPosition = null;
     this.currentPositionTimer = null;
 
-    this.targetPosition = 100;
+    this.targetPosition = null;
 
     this.windowCoveringService = new Service.WindowCovering(this.name);
 
@@ -82,7 +82,7 @@ class MinimalisticHttpBlinds {
         const position = parseInt(body);
 
         if (isNaN(position)) {
-          this.log(`Error in getting current position: ${body}`)
+          this.log(`Error in getting current position: ${body}`);
         } else {
           this.setLastKnownPosition(position);
 
@@ -117,6 +117,11 @@ class MinimalisticHttpBlinds {
   }
 
   setLastKnownPosition(value) {
+    if (isNaN(value)) {
+      this.log(`Error setting current position: ${value}`);
+      return;
+    }
+
     if (this.lastKnownPosition !== value) {
       if (this.lastKnownPosition === null) {
         this.log(`Setting initial position: ${this.getPositionDescription(value)}`);
