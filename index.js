@@ -74,19 +74,23 @@ class MinimalisticHttpBlinds {
       },
       (error, response, body) => {
         if (error) {
-          this.log(`Error setting the new position: ${body} -- ${error.toString()}`);
+          this.log(`Error in getting current position: ${body} -- ${error.toString()}`);
           this.startCurrentPositionTimer();
           return;
         }
 
         const position = parseInt(body);
 
-        this.setLastKnownPosition(position);
+        if (isNaN(position)) {
+          this.log(`Error in getting current position: ${body} -- ${error.toString()}`)
+        } else {
+          this.setLastKnownPosition(position);
 
-        if (updateTargetPosition) {
-          this.windowCoveringService
-            .getCharacteristic(Characteristic.TargetPosition)
-            .setValue(position)
+          if (updateTargetPosition) {
+            this.windowCoveringService
+              .getCharacteristic(Characteristic.TargetPosition)
+              .setValue(position);
+          }
         }
 
         this.startCurrentPositionTimer();
