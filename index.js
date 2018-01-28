@@ -82,7 +82,7 @@ class MinimalisticHttpBlinds {
         const position = parseInt(body);
 
         if (isNaN(position)) {
-          this.log(`Error in getting current position: ${body} -- ${error.toString()}`)
+          this.log(`Error in getting current position: ${body}`)
         } else {
           this.setLastKnownPosition(position);
 
