@@ -1,30 +1,26 @@
 const request = require('request');
-let Service, Characteristic;
 
-module.exports = function (homebridge) {
-  Service = homebridge.hap.Service;
-  Characteristic = homebridge.hap.Characteristic;
-  homebridge.registerAccessory('homebridge-minimal-http-blinds', 'MinimalisticHttpBlinds', MinimalisticHttpBlinds);
-};
+let Service;
+let Characteristic;
 
 /**
  * About WindowCover position: 100 is fully open, 0 is fully closed
  */
-
 class MinimalisticHttpBlinds {
   constructor(log, config) {
     this.log = log;
 
     // Required parameters
-    this.getCurrentPositionUrl = config.get_current_position_url || "";
-    this.setTargetPositionUrl = config.set_target_position_url || "";
+    this.getCurrentPositionUrl = config.get_current_position_url || '';
+    this.setTargetPositionUrl = config.set_target_position_url || '';
 
     // Optional parameters: HTTP methods
     this.getCurrentPositionMethod = config.get_current_position_method || 'GET';
     this.setTargetPositionMethod = config.set_target_position_method || 'POST';
 
     // Optional parameters: polling times
-    this.currentPositionPollingInterval = parseInt(config.get_current_position_polling_millis) || 500;
+    this.currentPositionPollingInterval =
+      parseInt(config.get_current_position_polling_millis, 10) || 500;
 
     // Internal fields
     this.lastKnownPosition = null;
@@ -61,7 +57,7 @@ class MinimalisticHttpBlinds {
 
     this.currentPositionTimer = setTimeout(
       this.currentPositionTimerAction.bind(this),
-      this.currentPositionPollingInterval
+      this.currentPositionPollingInterval,
     );
   }
 
@@ -79,9 +75,9 @@ class MinimalisticHttpBlinds {
           return;
         }
 
-        const position = parseInt(body);
+        const position = parseInt(body, 10);
 
-        if (isNaN(position)) {
+        if (isNaN(position)) { // eslint-disable-line
           this.log(`Error in getting current position: ${body}`);
         } else {
           this.setLastKnownPosition(position);
@@ -94,7 +90,7 @@ class MinimalisticHttpBlinds {
         }
 
         this.startCurrentPositionTimer();
-      }
+      },
     );
   }
 
@@ -104,29 +100,29 @@ class MinimalisticHttpBlinds {
     }
   }
 
-  getPositionDescription(value) {
+  static getPositionDescription(value) {
     if (value === 100) {
       return 'open';
     } else if (value === 0) {
       return 'closed';
     } else if (value === 50) {
       return 'half open';
-    } else {
-      return `${value}%`;
     }
+
+    return `${value}%`;
   }
 
   setLastKnownPosition(value) {
-    if (isNaN(value)) {
+    if (isNaN(value)) { // eslint-disable-line
       this.log(`Error setting current position: ${value}`);
       return;
     }
 
     if (this.lastKnownPosition !== value) {
       if (this.lastKnownPosition === null) {
-        this.log(`Setting initial position: ${this.getPositionDescription(value)}`);
+        this.log(`Setting initial position: ${this.constructor.getPositionDescription(value)}`);
       } else {
-        this.log(`Blind has moved, new position: ${this.getPositionDescription(value)}`);
+        this.log(`Blind has moved, new position: ${this.constructor.getPositionDescription(value)}`);
       }
 
       this.windowCoveringService
@@ -144,7 +140,7 @@ class MinimalisticHttpBlinds {
   setTargetPosition(position, callback) {
     this.targetPosition = position;
 
-    this.log(`Requested new position: ${this.getPositionDescription(position)}`);
+    this.log(`Requested new position: ${this.constructor.getPositionDescription(position)}`);
     this.stopCurrentPositionTimer();
 
     request(
@@ -162,7 +158,13 @@ class MinimalisticHttpBlinds {
         this.setLastKnownPosition(position);
         this.startCurrentPositionTimer();
         callback(null);
-      }
+      },
     );
   }
 }
+
+module.exports = (homebridge) => {
+  Service = homebridge.hap.Service; // eslint-disable-line
+  Characteristic = homebridge.hap.Characteristic; // eslint-disable-line
+  homebridge.registerAccessory('homebridge-minimal-http-blinds', 'MinimalisticHttpBlinds', MinimalisticHttpBlinds);
+};
