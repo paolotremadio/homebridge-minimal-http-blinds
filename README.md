@@ -14,7 +14,7 @@ The features:
 #### 1] Install it into your homebridge instance
 
 ````bash
-npm install -g homebridge-minimal-http-blinds
+npm install -g https://github.com/paolotremadio/homebridge-minimal-http-blinds
 ````
 
 #### 2] Minimal configuration
