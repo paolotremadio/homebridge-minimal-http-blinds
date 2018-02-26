@@ -70,7 +70,7 @@ class MinimalisticHttpBlinds {
       },
       (error, response, body) => {
         if (error) {
-          this.log(`Error in getting current position: ${body.replace(/(?:\r\n|\r|\n)/g, '')} -- ${error.toString()}`);
+          this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''} -- ${error.toString()}`);
           this.startCurrentPositionTimer();
           return;
         }
@@ -78,7 +78,7 @@ class MinimalisticHttpBlinds {
         const position = parseInt(body, 10);
 
         if (isNaN(position)) { // eslint-disable-line
-          this.log(`Error in getting current position: ${body.replace(/(?:\r\n|\r|\n)/g, '')}`);
+          this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
         } else {
           this.setLastKnownPosition(position);
 
