@@ -22,6 +22,9 @@ class MinimalisticHttpBlinds {
     this.currentPositionPollingInterval =
       parseInt(config.get_current_position_polling_millis, 10) || 500;
 
+    // Optional parameter: tolerance
+    this.currentPositionTolerance = config.current_position_tolerance || 0;
+
     // Internal fields
     this.lastKnownPosition = null;
     this.currentPositionTimer = null;
@@ -118,6 +121,8 @@ class MinimalisticHttpBlinds {
       return;
     }
 
+    let returnedValue = value;
+
     if (this.lastKnownPosition !== value) {
       if (this.lastKnownPosition === null) {
         this.log(`Setting initial position: ${this.constructor.getPositionDescription(value)}`);
@@ -125,12 +130,18 @@ class MinimalisticHttpBlinds {
         this.log(`Blind has moved, new position: ${this.constructor.getPositionDescription(value)}`);
       }
 
+      // Override the current position to account for tolerance
+      const positionDifference = Math.abs(this.targetPosition - value);
+      if (positionDifference <= this.currentPositionTolerance) {
+        returnedValue = this.targetPosition;
+      }
+
       this.windowCoveringService
         .getCharacteristic(Characteristic.CurrentPosition)
-        .setValue(value);
+        .setValue(returnedValue);
     }
 
-    this.lastKnownPosition = value;
+    this.lastKnownPosition = returnedValue;
   }
 
   getTargetPosition(callback) {
