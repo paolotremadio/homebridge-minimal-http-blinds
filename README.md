@@ -47,6 +47,8 @@ Here are them all with their default values.
     "get_current_position_method": "GET",
     "set_target_position_method": "POST",
     
+    "get_battery_level_url": "http://192.168.1.55/battery",
+    
     "get_current_position_polling_millis": "500",
 }
 ````
@@ -64,3 +66,8 @@ This URL must return the current blinds position **in plaintext**, from 0 to 100
 
 This URL must trigger the blinds movement. The requested opening position is, once again, an integer from 0 to 100 (0 being closed and 100 opened).
 Please note that the target position is passed **directly in the URL**. (It's the `%position%` placeholder)  
+
+##### 4.3] `get_battery_level_url` (optional)
+
+This URL must return the current blinds battery charge **in plaintext**, from 0 to 100.  
+(0 being empty and 100 being fully charged)

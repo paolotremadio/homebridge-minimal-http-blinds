@@ -1,4 +1,5 @@
 const request = require('request');
+const debug = require('debug')('homebridge-minimal-http-blinds');
 
 let Service;
 let Characteristic;
@@ -9,10 +10,12 @@ let Characteristic;
 class MinimalisticHttpBlinds {
   constructor(log, config) {
     this.log = log;
+    this.name = config.name;
 
     // Required parameters
     this.getCurrentPositionUrl = config.get_current_position_url || '';
     this.setTargetPositionUrl = config.set_target_position_url || '';
+    this.getBatteryUrl = config.get_battery_level_url || false;
 
     // Optional parameters: HTTP methods
     this.getCurrentPositionMethod = config.get_current_position_method || 'GET';
@@ -31,6 +34,8 @@ class MinimalisticHttpBlinds {
 
     this.targetPosition = null;
 
+    this.lastKnownBatteryLevel = null;
+
     this.windowCoveringService = new Service.WindowCovering(this.name);
 
     this.windowCoveringService
@@ -45,14 +50,61 @@ class MinimalisticHttpBlinds {
     // Initialise accessories, update both CurrentPosition and TargetPosition
     this.currentPositionTimerAction(true);
     this.log(`Polling blind state every ${this.currentPositionPollingInterval}ms`);
+
+    this.batteryService = null;
+    if (this.getBatteryUrl) {
+      debug('Including battery service');
+
+      this.batteryService = new Service.BatteryService('Battery level');
+
+      this.batteryService
+        .getCharacteristic(Characteristic.BatteryLevel)
+        .on('get', callback => callback(null, this.lastKnownBatteryLevel));
+
+      this.batteryService
+        .getCharacteristic(Characteristic.ChargingState)
+        .on('get', callback => callback(null, Characteristic.ChargingState.NOT_CHARGING));
+
+      this.batteryService
+        .getCharacteristic(Characteristic.StatusLowBattery)
+        .on('get', this.getStatusLowBattery.bind(this));
+    }
   }
 
   getServices() {
+    if (this.batteryService) {
+      return [this.windowCoveringService, this.batteryService];
+    }
+
     return [this.windowCoveringService];
+  }
+
+  calculateStatusLowBattery() {
+    if (this.lastKnownBatteryLevel > 20) {
+      return Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL;
+    }
+
+    return Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW;
+  }
+
+  getStatusLowBattery(callback) {
+    callback(this.calculateStatusLowBattery());
   }
 
   getCurrentPosition(callback) {
     callback(null, this.lastKnownPosition);
+  }
+
+  updateBatteryLevel(level) {
+    this.lastKnownBatteryLevel = level;
+
+    this.batteryService
+      .getCharacteristic(Characteristic.BatteryLevel)
+      .setValue(this.lastKnownBatteryLevel);
+
+    this.batteryService
+      .getCharacteristic(Characteristic.StatusLowBattery)
+      .setValue(this.calculateStatusLowBattery());
   }
 
   startCurrentPositionTimer() {
@@ -61,6 +113,31 @@ class MinimalisticHttpBlinds {
     this.currentPositionTimer = setTimeout(
       this.currentPositionTimerAction.bind(this),
       this.currentPositionPollingInterval,
+    );
+  }
+
+  fetchBatteryLevel() {
+    request(
+      {
+        url: this.getBatteryUrl,
+        method: 'GET',
+        timeout: 15000,
+      },
+      (error, response, body) => {
+        if (error) {
+          this.log(`Error in getting battery level: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''} -- ${error.toString()}`);
+          return;
+        }
+
+        const level = parseInt(body, 10);
+
+        if (isNaN(level)) { // eslint-disable-line
+          this.log(`Error in getting battery level: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
+        } else {
+          debug(`Battery level fetched: ${level}`);
+          this.updateBatteryLevel(level);
+        }
+      },
     );
   }
 
@@ -83,6 +160,7 @@ class MinimalisticHttpBlinds {
         if (isNaN(position)) { // eslint-disable-line
           this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
         } else {
+          debug(`Current position fetched: ${position}`);
           this.setLastKnownPosition(position);
 
           if (updateTargetPosition) {
@@ -92,6 +170,9 @@ class MinimalisticHttpBlinds {
           }
         }
 
+        if (this.getBatteryUrl) {
+          this.fetchBatteryLevel();
+        }
         this.startCurrentPositionTimer();
       },
     );
