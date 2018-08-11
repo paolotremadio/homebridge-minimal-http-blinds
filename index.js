@@ -1,5 +1,8 @@
 const request = require('request');
+const moment = require('moment');
 const debug = require('debug')('homebridge-minimal-http-blinds');
+
+const CustomCharacteristics = require('./custom-characteristics');
 
 let Service;
 let Characteristic;
@@ -36,6 +39,9 @@ class MinimalisticHttpBlinds {
 
     this.lastKnownBatteryLevel = null;
 
+    this.lastPositionUpdateTimestamp = null;
+    this.lastPositionUpdateStatus = 'n/a';
+
     this.windowCoveringService = new Service.WindowCovering(this.name);
 
     this.windowCoveringService
@@ -46,6 +52,14 @@ class MinimalisticHttpBlinds {
       .getCharacteristic(Characteristic.TargetPosition)
       .on('get', this.getTargetPosition.bind(this))
       .on('set', this.setTargetPosition.bind(this));
+
+    this.windowCoveringService
+      .addCharacteristic(CustomCharacteristics.LastCheckTimestamp)
+      .on('get', callback => callback(null, this.formatLastUpdateTimestamp()));
+
+    this.windowCoveringService
+      .addCharacteristic(CustomCharacteristics.LastCheckStatus)
+      .on('get', callback => callback(null, this.lastPositionUpdateStatus));
 
     // Initialise accessories, update both CurrentPosition and TargetPosition
     this.currentPositionTimerAction(true);
@@ -100,11 +114,11 @@ class MinimalisticHttpBlinds {
 
     this.batteryService
       .getCharacteristic(Characteristic.BatteryLevel)
-      .setValue(this.lastKnownBatteryLevel);
+      .updateValue(this.lastKnownBatteryLevel);
 
     this.batteryService
       .getCharacteristic(Characteristic.StatusLowBattery)
-      .setValue(this.calculateStatusLowBattery());
+      .updateValue(this.calculateStatusLowBattery());
   }
 
   startCurrentPositionTimer() {
@@ -141,6 +155,20 @@ class MinimalisticHttpBlinds {
     );
   }
 
+  refreshLastUpdate() {
+    this.windowCoveringService
+      .getCharacteristic(CustomCharacteristics.LastCheckTimestamp)
+      .updateValue(this.formatLastUpdateTimestamp());
+
+    this.windowCoveringService
+      .getCharacteristic(CustomCharacteristics.LastCheckStatus)
+      .updateValue(this.lastPositionUpdateStatus);
+  }
+
+  formatLastUpdateTimestamp() {
+    return this.lastPositionUpdateTimestamp ? this.lastPositionUpdateTimestamp.fromNow() : 'n/a';
+  }
+
   currentPositionTimerAction(updateTargetPosition) {
     request(
       {
@@ -149,6 +177,9 @@ class MinimalisticHttpBlinds {
         timeout: 15000,
       },
       (error, response, body) => {
+        this.lastPositionUpdateTimestamp = moment();
+        this.lastPositionUpdateStatus = 'Failed';
+
         if (error) {
           this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''} -- ${error.toString()}`);
           this.startCurrentPositionTimer();
@@ -160,19 +191,21 @@ class MinimalisticHttpBlinds {
         if (isNaN(position)) { // eslint-disable-line
           this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
         } else {
+          this.lastPositionUpdateStatus = 'Successful';
           debug(`Current position fetched: ${position}`);
           this.setLastKnownPosition(position);
 
           if (updateTargetPosition) {
             this.windowCoveringService
               .getCharacteristic(Characteristic.TargetPosition)
-              .setValue(position);
+              .updateValue(position);
           }
         }
 
         if (this.getBatteryUrl) {
           this.fetchBatteryLevel();
         }
+        this.refreshLastUpdate();
         this.startCurrentPositionTimer();
       },
     );
@@ -219,7 +252,7 @@ class MinimalisticHttpBlinds {
 
       this.windowCoveringService
         .getCharacteristic(Characteristic.CurrentPosition)
-        .setValue(returnedValue);
+        .updateValue(returnedValue);
     }
 
     this.lastKnownPosition = returnedValue;
