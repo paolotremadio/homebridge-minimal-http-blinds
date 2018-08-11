@@ -1,7 +1,7 @@
 {
   "name": "homebridge-minimal-http-blinds",
   "description": "Minimalistic HTTP blinds management *that supports percentages* for diy-ish projects.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "author": {
     "name": "Paolo Tremadio"
   },
