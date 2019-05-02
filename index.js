@@ -1,8 +1,9 @@
-const request = require('request');
+const axios = require('axios');
 const moment = require('moment');
 const debug = require('debug')('homebridge-minimal-http-blinds');
 
 const CustomCharacteristics = require('./custom-characteristics');
+const Api = require('./api');
 
 let Service;
 let Characteristic;
@@ -41,6 +42,34 @@ class MinimalisticHttpBlinds {
 
     this.lastPositionUpdateTimestamp = null;
     this.lastPositionUpdateStatus = 'n/a';
+
+    if (config.api) {
+      Api(
+        config.api.host,
+        config.api.port,
+        {
+          getStatus: async() => ({
+            battery: this.lastKnownBatteryLevel,
+            targetPosition: {
+              value: this.targetPosition,
+              description: this.constructor.getPositionDescription(this.targetPosition),
+            },
+            currentPosition: {
+              value: this.lastKnownPosition,
+              description: this.constructor.getPositionDescription(this.lastKnownPosition),
+              lastUpdate: {
+                value: this.lastPositionUpdateTimestamp,
+                description: this.formatLastUpdateTimestamp(),
+                status: this.lastPositionUpdateStatus,
+              },
+            },
+          }),
+          setPosition: async (position) => new Promise((resolve) => {
+            this.setTargetPosition(position, () => resolve());
+          }),
+        },
+      );
+    }
 
     this.windowCoveringService = new Service.WindowCovering(this.name);
 
@@ -130,29 +159,26 @@ class MinimalisticHttpBlinds {
     );
   }
 
-  fetchBatteryLevel() {
-    request(
-      {
+  async fetchBatteryLevel() {
+    try {
+      const response = await axios({
         url: this.getBatteryUrl,
         method: 'GET',
         timeout: 15000,
-      },
-      (error, response, body) => {
-        if (error) {
-          this.log(`Error in getting battery level: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''} -- ${error.toString()}`);
-          return;
-        }
+      });
 
-        const level = parseInt(body, 10);
+      const body = response.data;
+      const level = parseInt(body, 10);
 
-        if (isNaN(level)) { // eslint-disable-line
-          this.log(`Error in getting battery level: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
-        } else {
-          debug(`Battery level fetched: ${level}`);
-          this.updateBatteryLevel(level);
-        }
-      },
-    );
+      if (isNaN(level)) { // eslint-disable-line
+        this.log(`Error in getting battery level: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
+      } else {
+        debug(`Battery level fetched: ${level}`);
+        this.updateBatteryLevel(level);
+      }
+    } catch(e) {
+      this.log(`Error in getting battery level: ${e.toString()}`);
+    }
   }
 
   refreshLastUpdate() {
@@ -166,49 +192,55 @@ class MinimalisticHttpBlinds {
   }
 
   formatLastUpdateTimestamp() {
-    return this.lastPositionUpdateTimestamp ? this.lastPositionUpdateTimestamp.fromNow() : 'n/a';
+    return this.lastPositionUpdateTimestamp ? `${this.lastPositionUpdateTimestamp.format('H:m')} - ${this.lastPositionUpdateTimestamp.fromNow()}` : 'n/a';
   }
 
-  currentPositionTimerAction(updateTargetPosition) {
-    request(
-      {
+  async fetchCurrentPosition() {
+    try {
+      const response = await axios({
         url: this.getCurrentPositionUrl,
         method: this.getCurrentPositionMethod,
         timeout: 15000,
-      },
-      (error, response, body) => {
-        this.lastPositionUpdateTimestamp = moment();
-        this.lastPositionUpdateStatus = 'Failed';
+      });
 
-        if (error) {
-          this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''} -- ${error.toString()}`);
-          this.startCurrentPositionTimer();
-          return;
-        }
+      return response.data;
+    } catch (e) {
+      this.log(`Error in getting current position: ${e.toString()}`);
+      return false;
+    }
+  }
 
-        const position = parseInt(body, 10);
+  async currentPositionTimerAction(updateTargetPosition) {
+    const body = await this.fetchCurrentPosition();
 
-        if (isNaN(position)) { // eslint-disable-line
-          this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
-        } else {
-          this.lastPositionUpdateStatus = 'Successful';
-          debug(`Current position fetched: ${position}`);
-          this.setLastKnownPosition(position);
+    this.lastPositionUpdateTimestamp = moment();
+    this.lastPositionUpdateStatus = 'Failed';
+    this.startCurrentPositionTimer();
 
-          if (updateTargetPosition) {
-            this.windowCoveringService
-              .getCharacteristic(Characteristic.TargetPosition)
-              .updateValue(position);
-          }
-        }
+    if (body === false) {
+      return;
+    }
 
-        if (this.getBatteryUrl) {
-          this.fetchBatteryLevel();
-        }
-        this.refreshLastUpdate();
-        this.startCurrentPositionTimer();
-      },
-    );
+    const position = parseInt(body, 10);
+
+    if (isNaN(position)) { // eslint-disable-line
+      this.log(`Error in getting current position: ${body ? body.replace(/(?:\r\n|\r|\n)/g, '') : ''}`);
+    } else {
+      this.lastPositionUpdateStatus = 'Successful';
+      debug(`Current position fetched: ${position}`);
+      this.setLastKnownPosition(position);
+
+      if (updateTargetPosition) {
+        this.windowCoveringService
+          .getCharacteristic(Characteristic.TargetPosition)
+          .updateValue(position);
+      }
+    }
+
+    if (this.getBatteryUrl) {
+      this.fetchBatteryLevel();
+    }
+    this.refreshLastUpdate();
   }
 
   stopCurrentPositionTimer() {
@@ -218,7 +250,9 @@ class MinimalisticHttpBlinds {
   }
 
   static getPositionDescription(value) {
-    if (value === 100) {
+    if (value === null) {
+      return 'unknown';
+    } else if (value === 100) {
       return 'open';
     } else if (value === 0) {
       return 'closed';
@@ -262,29 +296,28 @@ class MinimalisticHttpBlinds {
     callback(null, this.targetPosition);
   }
 
-  setTargetPosition(position, callback) {
+  async requestPosition(position) {
+    try {
+      await axios({
+        url: this.setTargetPositionUrl.replace('%position%', position),
+        method: this.setTargetPositionMethod,
+        timeout: 15000,
+      });
+    } catch (e) {
+      this.log(`Error setting the new position: ${e.toString()}`);
+    }
+  }
+
+  async setTargetPosition(position, callback) {
     this.targetPosition = position;
 
     this.log(`Requested new position: ${this.constructor.getPositionDescription(position)}`);
     this.stopCurrentPositionTimer();
 
-    request(
-      {
-        url: this.setTargetPositionUrl.replace('%position%', position),
-        method: this.setTargetPositionMethod,
-        timeout: 15000,
-      },
-      (error, response, body) => {
-        if (error) {
-          this.log(`Error setting the new position: ${body} -- ${error.toString()}`);
-          return;
-        }
-
-        this.setLastKnownPosition(position);
-        this.startCurrentPositionTimer();
-        callback(null);
-      },
-    );
+    await this.requestPosition(position);
+    this.setLastKnownPosition(position);
+    this.startCurrentPositionTimer();
+    callback(null);
   }
 }
 
