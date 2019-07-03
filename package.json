@@ -23,7 +23,8 @@
     "debug": "^3.1.0",
     "express": "^4.16.4",
     "hap-nodejs": "^0.4.47",
-    "moment": "^2.22.2"
+    "moment": "^2.22.2",
+    "snyk": "^1.189.0"
   },
   "devDependencies": {
     "canned": "^0.3.12",
@@ -33,6 +34,9 @@
   },
   "scripts": {
     "lint": "./node_modules/eslint/bin/eslint.js . --ext .js",
-    "mocks": "./node_modules/.bin/canned -p 9000 ./mocks/"
-  }
+    "mocks": "./node_modules/.bin/canned -p 9000 ./mocks/",
+    "snyk-protect": "snyk protect",
+    "prepublish": "npm run snyk-protect"
+  },
+  "snyk": true
 }
